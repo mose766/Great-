@@ -1,4 +1,4 @@
-name: MT5-Auto-VPS
+name: MT5-VPS-FULL
 
 on:
   workflow_dispatch:
@@ -46,7 +46,7 @@ jobs:
 
           Start-Process $file -ArgumentList "/auto" -Wait
 
-      - name: Create MT5 Auto Login Config
+      - name: MT5 Auto Login Config
         shell: powershell
         run: |
           @"
@@ -56,7 +56,7 @@ jobs:
           Server=${{ secrets.MT5_SERVER }}
           "@ | Out-File "C:\MT5Login.ini"
 
-      - name: Download Indicator (Google Drive)
+      - name: Download Indicator From Google Drive
         shell: powershell
         run: |
           $fileId = "1uh49ZpTGcbVZRIBJbLKS9whdXcgRrOxN"
@@ -65,13 +65,13 @@ jobs:
           $root = "$env:APPDATA\MetaQuotes\Terminal"
           $folder = Get-ChildItem $root | Select-Object -First 1
 
-          $indPath = "$($folder.FullName)\MQL5\Indicators"
+          $path = "$($folder.FullName)\MQL5\Indicators"
 
-          New-Item -ItemType Directory -Path $indPath -Force
+          New-Item -ItemType Directory -Path $path -Force
 
           Invoke-WebRequest `
             -Uri $url `
-            -OutFile "$indPath\Indicator.ex5"
+            -OutFile "$path\Indicator.ex5"
 
       - name: Launch MT5
         shell: powershell
@@ -106,39 +106,42 @@ jobs:
             --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} `
             --hostname=mt5-vps-${{ github.run_id }}
 
-      - name: Show RDP Access Info
+      - name: SHOW VPS IP (IMPORTANT FIX)
         shell: powershell
         run: |
-          Write-Host "=================================="
-          Write-Host "RDP READY"
-          Write-Host "USER: RDP"
-          Write-Host "PASS: $env:RDP_PASS"
-          Write-Host "=================================="
+          Start-Sleep -Seconds 10
 
-      - name: Tailscale Manual Access Info
+          $ip = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
+
+          Write-Host "===================================="
+          Write-Host "TAILSCALE VPS READY"
+          Write-Host "===================================="
+          Write-Host "DEVICE NAME: mt5-vps-${{ github.run_id }}"
+          Write-Host "VPS IP: $ip"
+          Write-Host "===================================="
+
+      - name: Manual Access Links
         shell: powershell
         run: |
 
-          Write-Host "=================================="
-          Write-Host "TAILSCALE ACCESS LINKS"
-          Write-Host "=================================="
+          Write-Host "===================================="
+          Write-Host "MANUAL ACCESS"
+          Write-Host "===================================="
 
-          Write-Host "Admin Panel:"
+          Write-Host "Dashboard:"
           Write-Host "https://login.tailscale.com/admin/machines"
 
           Write-Host ""
-          Write-Host "Login Page:"
+          Write-Host "Login:"
           Write-Host "https://login.tailscale.com/start"
 
           Write-Host ""
-          Write-Host "Device Name:"
+          Write-Host "Find device:"
           Write-Host "mt5-vps-${{ github.run_id }}"
 
-          Write-Host ""
-          Write-Host "Use Tailscale app to connect to this device"
-          Write-Host "=================================="
+          Write-Host "===================================="
 
-      - name: Keep Alive (6 Hours)
+      - name: Keep Alive
         shell: powershell
         run: |
           for ($i = 1; $i -le 360; $i++) {
