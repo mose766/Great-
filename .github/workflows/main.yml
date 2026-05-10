@@ -1,0 +1,123 @@
+name: MT5-Auto-RDP
+
+on:
+  workflow_dispatch:
+
+jobs:
+  mt5-vps:
+    runs-on: windows-latest
+    timeout-minutes: 360
+
+    steps:
+
+      - name: Enable RDP
+        shell: powershell
+        run: |
+          Set-ItemProperty `
+            -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
+            -Name 'fDenyTSConnections' -Value 0
+
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+          Restart-Service TermService -Force
+
+      - name: Create RDP User
+        shell: powershell
+        run: |
+          $pass = "MT5Runner@2026"
+          $secure = ConvertTo-SecureString $pass -AsPlainText -Force
+
+          if (Get-LocalUser -Name "RDP" -ErrorAction SilentlyContinue) {
+            Remove-LocalUser -Name "RDP"
+          }
+
+          New-LocalUser -Name "RDP" -Password $secure -AccountNeverExpires
+          Add-LocalGroupMember -Group "Administrators" -Member "RDP"
+
+          echo "RDP_PASS=$pass" >> $env:GITHUB_ENV
+
+      - name: Install MT5
+        shell: powershell
+        run: |
+          $file = "$env:TEMP\mt5.exe"
+
+          Invoke-WebRequest `
+            -Uri "https://download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe" `
+            -OutFile $file
+
+          Start-Process $file -ArgumentList "/auto" -Wait
+
+      - name: Create MT5 Auto Login File
+        shell: powershell
+        run: |
+          @"
+          [Common]
+          Login=${{ secrets.MT5_LOGIN }}
+          Password=${{ secrets.MT5_PASSWORD }}
+          Server=${{ secrets.MT5_SERVER }}
+          "@ | Out-File "C:\MT5Login.ini"
+
+      - name: Download Indicator From Google Drive
+        shell: powershell
+        run: |
+          $fileId = "1uh49ZpTGcbVZRIBJbLKS9whdXcgRrOxN"
+          $url = "https://drive.google.com/uc?export=download&id=$fileId"
+
+          $mt5Path = "$env:APPDATA\MetaQuotes\Terminal"
+          $folder = Get-ChildItem $mt5Path | Select-Object -First 1
+
+          $indicatorPath = "$($folder.FullName)\MQL5\Indicators"
+
+          New-Item -ItemType Directory -Path $indicatorPath -Force
+
+          Invoke-WebRequest `
+            -Uri $url `
+            -OutFile "$indicatorPath\Indicator.ex5"
+
+      - name: Launch MT5
+        shell: powershell
+        run: |
+          $paths = @(
+            "C:\Program Files\MetaTrader 5\terminal64.exe",
+            "C:\Program Files (x86)\MetaTrader 5\terminal64.exe"
+          )
+
+          foreach ($p in $paths) {
+            if (Test-Path $p) {
+              Start-Process $p -ArgumentList "/config:C:\MT5Login.ini"
+              break
+            }
+          }
+
+      - name: Install Tailscale
+        shell: powershell
+        run: |
+          $msi = "$env:TEMP\tailscale.msi"
+
+          Invoke-WebRequest `
+            -Uri "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" `
+            -OutFile $msi
+
+          Start-Process msiexec.exe -ArgumentList "/i $msi /quiet /norestart" -Wait
+
+      - name: Connect Tailscale
+        shell: powershell
+        run: |
+          & "$env:ProgramFiles\Tailscale\tailscale.exe" up `
+            --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} `
+            --hostname=mt5-vps-${{ github.run_id }}
+
+      - name: Show Access Info
+        shell: powershell
+        run: |
+          Write-Host "================================="
+          Write-Host "MT5 VPS READY"
+          Write-Host "USER: RDP"
+          Write-Host "PASS: $env:RDP_PASS"
+          Write-Host "================================="
+
+      - name: Keep Alive
+        shell: powershell
+        run: |
+          for ($i=1; $i -le 360; $i++) {
+            Start-Sleep -Seconds 60
+          }
