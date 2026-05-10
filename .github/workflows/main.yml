@@ -1,4 +1,4 @@
-name: MT5-VPS-FULL
+name: MT5-VPS-STABLE-FINAL
 
 on:
   workflow_dispatch:
@@ -106,42 +106,68 @@ jobs:
             --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} `
             --hostname=mt5-vps-${{ github.run_id }}
 
-      - name: SHOW VPS IP (IMPORTANT FIX)
-        shell: powershell
-        run: |
-          Start-Sleep -Seconds 10
-
-          $ip = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
-
-          Write-Host "===================================="
-          Write-Host "TAILSCALE VPS READY"
-          Write-Host "===================================="
-          Write-Host "DEVICE NAME: mt5-vps-${{ github.run_id }}"
-          Write-Host "VPS IP: $ip"
-          Write-Host "===================================="
-
-      - name: Manual Access Links
+      - name: GET VPS IP (FIXED)
         shell: powershell
         run: |
 
-          Write-Host "===================================="
-          Write-Host "MANUAL ACCESS"
-          Write-Host "===================================="
+          $ts = "$env:ProgramFiles\Tailscale\tailscale.exe"
 
-          Write-Host "Dashboard:"
+          $ip = $null
+
+          for ($i = 1; $i -le 30; $i++) {
+
+            $ip = & $ts ip -4
+
+            if ($ip) {
+              break
+            }
+
+            Start-Sleep -Seconds 2
+          }
+
+          Write-Host "=================================="
+          Write-Host "MT5 VPS READY"
+          Write-Host "=================================="
+          Write-Host "DEVICE: mt5-vps-${{ github.run_id }}"
+          Write-Host "IP: $ip"
+          Write-Host "=================================="
+
+          echo "VPS_IP=$ip" >> $env:GITHUB_ENV
+
+      - name: Manual Tailscale Access Links
+        shell: powershell
+        run: |
+
+          Write-Host "=================================="
+          Write-Host "MANUAL ACCESS (IMPORTANT)"
+          Write-Host "=================================="
+
+          Write-Host ""
+          Write-Host "🌐 Tailscale Admin Panel:"
           Write-Host "https://login.tailscale.com/admin/machines"
 
           Write-Host ""
-          Write-Host "Login:"
+          Write-Host "🔑 Login Page:"
           Write-Host "https://login.tailscale.com/start"
 
           Write-Host ""
-          Write-Host "Find device:"
+          Write-Host "🖥 Device Name:"
           Write-Host "mt5-vps-${{ github.run_id }}"
 
-          Write-Host "===================================="
+          Write-Host ""
+          Write-Host "📡 VPS IP:"
+          Write-Host "$env:VPS_IP"
 
-      - name: Keep Alive
+          Write-Host ""
+          Write-Host "💡 Connect Steps:"
+          Write-Host "1. Open Tailscale app or website"
+          Write-Host "2. Login to your account"
+          Write-Host "3. Find device above"
+          Write-Host "4. Use IP for RDP connection"
+
+          Write-Host "=================================="
+
+      - name: Keep Alive (6 Hours)
         shell: powershell
         run: |
           for ($i = 1; $i -le 360; $i++) {
